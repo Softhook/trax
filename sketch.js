@@ -5,6 +5,8 @@ let currentPlayer = 'white';
 let aiEnabled = false;
 let selectedSide = 'curve';
 let selectedRotation = 0;
+let loopPath = [];
+let winner = null;
 
 function setup() {
     createCanvas(800, 600);
@@ -17,12 +19,29 @@ function draw() {
     
     if (gameState === "intro") {
         drawIntroScreen();
-    } else {
+    } else if (gameState === "game") {
         drawBoard();
         drawCurrentPlayer();
         drawTilePreview();
         drawControls();
+        
+    } else if (gameState === "gameOver") {
+      drawGameOverScreen();
+      drawBoard();
+      drawLoop();
     }
+}
+
+function drawGameOverScreen() {
+    fill(0);
+    textSize(32);
+    text(`${winner} wins!`, width/2, 20);
+    
+    fill(200);
+    rect(width/2 - 100, height/2, 200, 50);
+    
+    fill(0);
+    text("Restart", width/2, height - 100);
 }
 
 function drawIntroScreen() {
@@ -42,13 +61,21 @@ function drawIntroScreen() {
 function mousePressed() {
     if (gameState === "intro") {
         handleIntroClick();
-    } else if (mouseButton === RIGHT) {
-        selectedSide = selectedSide === 'curve' ? 'cross' : 'curve';
-        selectedRotation = 0;
-    } else {
-        handleGameClick();
+    } else if (gameState === "game") {
+        if (mouseButton === RIGHT) {
+            selectedSide = selectedSide === 'curve' ? 'cross' : 'curve';
+            selectedRotation = 0;
+        } else {
+            handleGameClick();
+        }
+    } else if (gameState === "gameOver") {
+        if (mouseX > width/2 - 100 && mouseX < width/2 + 100 &&
+            mouseY > height/2 && mouseY < height - 100) {
+            restartGame();
+        }
     }
 }
+
 
 function handleIntroClick() {
     if (mouseX > width/2 - 100 && mouseX < width/2 + 100) {
@@ -142,10 +169,91 @@ function handleGameClick() {
         if (isValidPlacement(gridX, gridY, newTile)) {
             board[key] = newTile;
             checkForcedMoves();
+            
+            // **Call loop detection after placing a tile**
+            checkWinCondition();
+            
             currentPlayer = currentPlayer === 'white' ? 'red' : 'white';
             if (aiEnabled) setTimeout(aiMove, 500);
         }
     }
+}
+
+function checkForLoop(startKey, color) {
+    let visited = new Set();
+    let stack = [{ key: startKey, from: null, path: [] }];
+    
+    while (stack.length > 0) {
+        let { key, from, path } = stack.pop();
+        
+        if (visited.has(key)) {
+            loopPath = path.concat([key]); // Store loop path
+            return true; // Loop detected
+        }
+        
+        visited.add(key);
+        let [x, y] = key.split(',').map(Number);
+        let tile = board[key];
+        if (!tile) continue;
+        
+        let connections = getConnections(tile);
+        
+        for (let [dx, dy, dir] of [[0,-1,'top'], [1,0,'right'], [0,1,'bottom'], [-1,0,'left']]) {
+            let neighborKey = `${x+dx},${y+dy}`;
+            if (neighborKey !== from && board[neighborKey]) {
+                let neighborTile = board[neighborKey];
+                let neighborConnections = getConnections(neighborTile);
+                let oppositeDir = oppositeDirection(dir);
+                
+                if (connections[dir] === color && neighborConnections[oppositeDir] === color) {
+                    stack.push({ key: neighborKey, from: key, path: path.concat([key]) });
+                }
+            }
+        }
+    }
+    return false;
+}
+
+function restartGame() {
+    gameState = "intro";
+    board = {};
+    currentPlayer = 'white';
+    loopPath = [];
+    winner = null;
+}
+
+function checkWinCondition() {
+    loopPath = [];
+    for (let key in board) {
+        let tile = board[key];
+        if (checkForLoop(key, 'white')) {
+            winner = 'White';
+            gameState = "gameOver";
+            return;
+        }
+        if (checkForLoop(key, 'red')) {
+            winner = 'Red';
+            gameState = "gameOver";
+            return;
+        }
+    }
+}
+
+function drawLoop() {
+    if (loopPath.length > 1) {
+        stroke(255, 255, 0);
+        strokeWeight(6);
+        noFill();
+        beginShape();
+        for (let key of loopPath) {
+            let [x, y] = key.split(',').map(Number);
+            let screenX = width/2 + x * tileSize;
+            let screenY = height/2 + y * tileSize;
+            vertex(screenX, screenY);
+        }
+        endShape(CLOSE);
+    }
+  noStroke();
 }
 
 function checkForcedMoves() {
