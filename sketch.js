@@ -15,6 +15,7 @@ function setup() {
     createCanvas(windowWidth, windowHeight);
     textAlign(CENTER, CENTER);
     document.addEventListener('contextmenu', event => event.preventDefault());
+  strokeCap(SQUARE);
 }
 
 function draw() {
@@ -42,24 +43,26 @@ function drawGameOverScreen() {
     text(`${winningPlayer} wins!`, width/2, 20);
     
     fill(200);
-    rect(width/2 - 100, height/2, 200, 50);
+    rect(width/2 - 100, height-80, 200, 50);
     
     fill(0);
-    text("Restart", width/2, height - 100);
+    text("Restart", width/2, height - 50);
 }
 
 function drawIntroScreen() {
     fill(0);
     textSize(32);
     text("TRAX", width/2, height/3);
-    
+
     fill(200);
     rect(width/2 - 100, height/2 - 25, 200, 50);
-    rect(width/2 - 100, height/2 + 50, 200, 50);
+    //rect(width/2 - 100, height/2 + 50, 200, 50);
     
     fill(0);
-    text("2 Players", width/2, height/2);
-    text("vs Computer", width/2, height/2 + 75);
+    text("2 Player", width/2, height/2);
+    //text("vs Computer", width/2, height/2 + 75);
+  
+
 }
 
 function windowResized() {
@@ -83,8 +86,9 @@ function mousePressed() {
             handleGameClick();
         }
     } else if (gameState === "gameOver") {
-        if (mouseX > width/2 - 100 && mouseX < width/2 + 100 &&
-            mouseY > height/2 && mouseY < height - 100) {
+      
+        if (mouseX > width/2 - 100 && mouseX < width/2 + 100 && mouseY > height-300 && mouseY < height) {
+          
             restartGame();
         }
     }
@@ -142,12 +146,12 @@ function drawTile(x, y, tile) {
         drawCurveTile(tile.color);
     }
     pop();
-    drawConnectionDots(tile);
+    //drawConnectionDots(tile);
     pop();
 }
 
 function drawCrossTile(color) {
-    strokeWeight(4);
+    strokeWeight(8);
     
     stroke(255);
     line(-tileSize/2, 0, tileSize/2, 0);
@@ -157,7 +161,7 @@ function drawCrossTile(color) {
 }
 
 function drawCurveTile(color) {
-    strokeWeight(4);
+    strokeWeight(8);
 
     stroke(255);
     arc(-tileSize/2, -tileSize/2, tileSize, tileSize, 0, HALF_PI);
@@ -181,16 +185,101 @@ function handleGameClick() {
         };
         
         if (isValidPlacement(gridX, gridY, newTile)) {
+            // Take a snapshot of the board before making changes
+            const originalBoard = {...board};
+            const originalKeys = new Set(Object.keys(originalBoard));
+            
+            // Place the player's tile
             board[key] = newTile;
+            
+            // Check and place forced moves
             checkForcedMoves();
             
-            // **Call loop detection after placing a tile**
-            checkWinCondition();
+            // Get all new keys added during this turn (player + forced)
+            const newKeys = Object.keys(board).filter(k => !originalKeys.has(k));
             
-            currentPlayer = currentPlayer === 'white' ? 'red' : 'white';
-            if (aiEnabled) setTimeout(aiMove, 500);
+            // Check adjacent empty spaces for overflow
+            const hasInvalid = checkIllegalMoves(newKeys);
+            
+            if (hasInvalid) {
+                // Revert the board to the original state
+                board = originalBoard;
+            } else {
+                // Proceed with the move
+                checkWinCondition();
+                currentPlayer = currentPlayer === 'white' ? 'red' : 'white';
+                if (aiEnabled) setTimeout(aiMove, 500);
+            }
         }
     }
+}
+
+function checkIllegalMoves(newKeys) {
+    const emptySpaces = new Set();
+
+    // Collect all empty spaces adjacent to newKeys
+    for (const key of newKeys) {
+        const [x, y] = key.split(',').map(Number);
+        for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) {
+            const adjKey = `${x + dx},${y + dy}`;
+            if (!board[adjKey]) {
+                emptySpaces.add(adjKey);
+            }
+        }
+    }
+
+    // Check each empty space for overflow
+    for (const adjKey of emptySpaces) {
+        const [x, y] = adjKey.split(',').map(Number);
+        const counts = { white: 0, red: 0 };
+
+        // Check all four directions for incoming tracks
+        // North (check tile to the north's bottom connection)
+        const northKey = `${x},${y - 1}`;
+        const northTile = board[northKey];
+        if (northTile) {
+            const conn = getConnections(northTile);
+            if (conn.bottom) {
+                counts[conn.bottom]++;
+            }
+        }
+
+        // East (check tile to the east's left connection)
+        const eastKey = `${x + 1},${y}`;
+        const eastTile = board[eastKey];
+        if (eastTile) {
+            const conn = getConnections(eastTile);
+            if (conn.left) {
+                counts[conn.left]++;
+            }
+        }
+
+        // South (check tile to the south's top connection)
+        const southKey = `${x},${y + 1}`;
+        const southTile = board[southKey];
+        if (southTile) {
+            const conn = getConnections(southTile);
+            if (conn.top) {
+                counts[conn.top]++;
+            }
+        }
+
+        // West (check tile to the west's right connection)
+        const westKey = `${x - 1},${y}`;
+        const westTile = board[westKey];
+        if (westTile) {
+            const conn = getConnections(westTile);
+            if (conn.right) {
+                counts[conn.right]++;
+            }
+        }
+
+        if (counts.white > 2 || counts.red > 2) {
+            return true; // invalid overflow found
+        }
+    }
+
+    return false; // no overflows
 }
 
 function checkForLoop(startKey, color) {
@@ -369,7 +458,7 @@ function dfsCheckLine(startKey, color, visited, path, boardMinX, boardMaxX, boar
 function drawLoop() {
     if (loopPath.length > 1) {
         stroke(255, 255, 0);
-        strokeWeight(6);
+        strokeWeight(2);
         noFill();
         beginShape();
         for (let key of loopPath) {
@@ -386,8 +475,8 @@ function drawLoop() {
 function drawWinningLine() {
     if (!winningLineType || !winningLineEdges) return;
 
-    stroke(50, 200, 50);
-    strokeWeight(6);
+    stroke(255, 255, 0);
+    strokeWeight(20);
     noFill();
 
     // Convert edge points to screen coordinates
@@ -410,18 +499,11 @@ function drawWinningLine() {
         end.y += tileSize/2;
     }
 
-    // Draw direct line between edges
-    line(start.x, start.y, end.x, end.y);
-
-    // Draw through tile centers (optional)
-    beginShape();
-    vertex(start.x, start.y);
-    for (let key of winningLine) {
-        let [x, y] = key.split(',').map(Number);
-        vertex(width/2 + x * tileSize, height/2 + y * tileSize);
-    }
-    vertex(end.x, end.y);
-    endShape();
+  //draw dots at beginning and end of winning line
+  point(start.x, start.y);
+  point(end.x, end.y);
+  
+  strokeWeight(2);
   noStroke();
 }
 
