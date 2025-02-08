@@ -6,10 +6,13 @@ let aiEnabled = false;
 let selectedSide = 'curve';
 let selectedRotation = 0;
 let loopPath = [];
-let winner = null;
+let winningLine = [];
+let winningLineType = null; // 'horizontal' or 'vertical'
+let winningLineEdges = null;
+let winningPlayer = null;
 
 function setup() {
-    createCanvas(800, 600);
+    createCanvas(windowWidth, windowHeight);
     textAlign(CENTER, CENTER);
     document.addEventListener('contextmenu', event => event.preventDefault());
 }
@@ -29,13 +32,14 @@ function draw() {
       drawGameOverScreen();
       drawBoard();
       drawLoop();
+      drawWinningLine();
     }
 }
 
 function drawGameOverScreen() {
     fill(0);
     textSize(32);
-    text(`${winner} wins!`, width/2, 20);
+    text(`${winningPlayer} wins!`, width/2, 20);
     
     fill(200);
     rect(width/2 - 100, height/2, 200, 50);
@@ -58,7 +62,17 @@ function drawIntroScreen() {
     text("vs Computer", width/2, height/2 + 75);
 }
 
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
+
 function mousePressed() {
+  
+    if (!fullscreen()) {
+      fullscreen(true);
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  
     if (gameState === "intro") {
         handleIntroClick();
     } else if (gameState === "game") {
@@ -219,24 +233,137 @@ function restartGame() {
     board = {};
     currentPlayer = 'white';
     loopPath = [];
-    winner = null;
+    winningLine = [];
+  winningLineEdges = null;
+   winningLineType = null;
+    winningPlayer = null;
 }
 
 function checkWinCondition() {
     loopPath = [];
+    winningLine = [];
     for (let key in board) {
-        let tile = board[key];
         if (checkForLoop(key, 'white')) {
-            winner = 'White';
+            winningPlayer = 'White Loop';
             gameState = "gameOver";
             return;
         }
         if (checkForLoop(key, 'red')) {
-            winner = 'Red';
+            winningPlayer = 'Red Loop';
             gameState = "gameOver";
             return;
         }
     }
+    
+    if (checkLineWin('white')) {
+        winningPlayer = 'White Line';
+        gameState = "gameOver";
+        return;
+    }
+    if (checkLineWin('red')) {
+        winningPlayer = 'Red Line';
+        gameState = "gameOver";
+        return;
+    }
+}
+
+function checkLineWin(color) {
+    let startTiles = Object.keys(board).filter(key => board[key].color === color);
+
+    // Compute board's min and max coordinates
+    let boardMinX = Infinity, boardMaxX = -Infinity, boardMinY = Infinity, boardMaxY = -Infinity;
+    for (let key in board) {
+        let [x, y] = key.split(',').map(Number);
+        boardMinX = Math.min(boardMinX, x);
+        boardMaxX = Math.max(boardMaxX, x);
+        boardMinY = Math.min(boardMinY, y);
+        boardMaxY = Math.max(boardMaxY, y);
+    }
+    const horizontalSpan = boardMaxX - boardMinX;
+    const verticalSpan = boardMaxY - boardMinY;
+
+    for (let startKey of startTiles) {
+        let visited = new Set(); // Create a new visited set for each startKey
+        let path = new Set();
+        if (dfsCheckLine(startKey, color, visited, path, boardMinX, boardMaxX, boardMinY, boardMaxY, horizontalSpan, verticalSpan)) {
+            winningLine = Array.from(path);
+            return true;
+        }
+    }
+    return false;
+}
+
+function dfsCheckLine(startKey, color, visited, path, boardMinX, boardMaxX, boardMinY, boardMaxY, horizontalSpan, verticalSpan) {
+    let stack = [{ key: startKey, from: null }];
+    let tilesInPath = new Set();
+    let edgePoints = {
+        horizontal: { start: null, end: null },
+        vertical: { start: null, end: null }
+    };
+
+    while (stack.length > 0) {
+        let { key, from } = stack.pop();
+        if (visited.has(key)) continue;
+        visited.add(key);
+        tilesInPath.add(key);
+
+        let [x, y] = key.split(',').map(Number);
+        let tile = board[key];
+        if (!tile) continue;
+        let connections = getConnections(tile);
+
+        // Check for edge connections
+        if (x === boardMinX && connections.left === color) {
+            edgePoints.horizontal.start = { x, y };
+        }
+        if (x === boardMaxX && connections.right === color) {
+            edgePoints.horizontal.end = { x, y };
+        }
+        if (y === boardMinY && connections.top === color) {
+            edgePoints.vertical.start = { x, y };
+        }
+        if (y === boardMaxY && connections.bottom === color) {
+            edgePoints.vertical.end = { x, y };
+        }
+
+        // Existing neighbor checking code...
+        for (let [dx, dy, dir] of [[0,-1,'top'], [1,0,'right'], [0,1,'bottom'], [-1,0,'left']]) {
+            let neighborKey = `${x+dx},${y+dy}`;
+            if (!visited.has(neighborKey) && board[neighborKey]) {
+                let neighborTile = board[neighborKey];
+                let neighborConnections = getConnections(neighborTile);
+                let oppositeDir = oppositeDirection(dir);
+                
+                if (connections[dir] === color && neighborConnections[oppositeDir] === color) {
+                    stack.push({ key: neighborKey, from: key });
+                }
+            }
+        }
+    }
+
+    // Check for horizontal line win
+    if (horizontalSpan >= 7 && edgePoints.horizontal.start && edgePoints.horizontal.end) {
+        winningLine = Array.from(tilesInPath);
+        winningLineType = 'horizontal';
+        winningLineEdges = {
+            start: edgePoints.horizontal.start,
+            end: edgePoints.horizontal.end
+        };
+        return true;
+    }
+
+    // Check for vertical line win
+    if (verticalSpan >= 7 && edgePoints.vertical.start && edgePoints.vertical.end) {
+        winningLine = Array.from(tilesInPath);
+        winningLineType = 'vertical';
+        winningLineEdges = {
+            start: edgePoints.vertical.start,
+            end: edgePoints.vertical.end
+        };
+        return true;
+    }
+
+    return false;
 }
 
 function drawLoop() {
@@ -253,6 +380,48 @@ function drawLoop() {
         }
         endShape(CLOSE);
     }
+  noStroke();
+}
+
+function drawWinningLine() {
+    if (!winningLineType || !winningLineEdges) return;
+
+    stroke(50, 200, 50);
+    strokeWeight(6);
+    noFill();
+
+    // Convert edge points to screen coordinates
+    const start = {
+        x: width/2 + winningLineEdges.start.x * tileSize,
+        y: height/2 + winningLineEdges.start.y * tileSize
+    };
+    
+    const end = {
+        x: width/2 + winningLineEdges.end.x * tileSize,
+        y: height/2 + winningLineEdges.end.y * tileSize
+    };
+
+    // Adjust points to tile edges
+    if (winningLineType === 'horizontal') {
+        start.x -= tileSize/2;
+        end.x += tileSize/2;
+    } else {
+        start.y -= tileSize/2;
+        end.y += tileSize/2;
+    }
+
+    // Draw direct line between edges
+    line(start.x, start.y, end.x, end.y);
+
+    // Draw through tile centers (optional)
+    beginShape();
+    vertex(start.x, start.y);
+    for (let key of winningLine) {
+        let [x, y] = key.split(',').map(Number);
+        vertex(width/2 + x * tileSize, height/2 + y * tileSize);
+    }
+    vertex(end.x, end.y);
+    endShape();
   noStroke();
 }
 
