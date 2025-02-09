@@ -10,6 +10,8 @@ let winningLine = [];
 let winningLineType = null; // 'horizontal' or 'vertical'
 let winningLineEdges = null;
 let winningPlayer = null;
+let lastPlayedTile = null;
+let forcedMoveTiles = new Set(); // Store coordinates of forced move tiles
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -59,7 +61,7 @@ function drawIntroScreen() {
 
   fill(0);
   text("2 Player", width / 2, height / 2);
-  text("vs dumb AI", width / 2, height / 2 + 75);
+  text("vs AI", width / 2, height / 2 + 75);
 }
 
 function windowResized() {
@@ -120,6 +122,8 @@ function startGame(ai) {
   gameState = "game";
   aiEnabled = ai;
   board = { "0,0": { side: "curve", rotation: 0, color: "white" } };
+  lastPlayedTile = { x: 0, y: 0 }; // Initial tile
+  forcedMoveTiles.clear();
 }
 
 function drawBoard() {
@@ -132,9 +136,14 @@ function drawBoard() {
 function drawTile(x, y, tile) {
   push();
   translate(width / 2 + x * tileSize, height / 2 + y * tileSize);
+  
+
+
   fill(0);
   stroke(0);
   rect(-tileSize / 2, -tileSize / 2, tileSize, tileSize);
+
+
 
   push();
   rotate(radians(tile.rotation));
@@ -143,8 +152,33 @@ function drawTile(x, y, tile) {
   } else {
     drawCurveTile(tile.color);
   }
+  
+  //This adds a black border onto the tile
+  //noFill();
+  //strokeWeight(3);
+  //stroke(0);
+  //rect(-tileSize / 2, -tileSize / 2, tileSize, tileSize);
+
   pop();
-  //drawConnectionDots(tile);
+  
+
+  
+  // Draw highlight for forced moves
+  if (forcedMoveTiles.has(`${x},${y}`)) {
+    noFill();
+    strokeWeight(2);
+    stroke(255, 150, 0);
+    rect(-tileSize/2+1, -tileSize/2+1, tileSize-2, tileSize-2);
+  }
+
+      // Draw highlight for last played tile
+  if (lastPlayedTile && lastPlayedTile.x === x && lastPlayedTile.y === y) {
+    noFill();
+    strokeWeight(2);
+    stroke(255, 215, 0); // Gold color
+    rect(-tileSize/2+1, -tileSize/2+1, tileSize-2, tileSize-2);
+  }
+
   pop();
 }
 
@@ -183,30 +217,38 @@ function handleGameClick() {
     };
 
     if (isValidPlacement(gridX, gridY, newTile)) {
-      // Take a snapshot of the board before making changes
       const originalBoard = { ...board };
       const originalKeys = new Set(Object.keys(originalBoard));
 
-      // Place the player's tile
+      // Place the player's tile and record it as last played
       board[key] = newTile;
+      lastPlayedTile = { x: gridX, y: gridY };
+      forcedMoveTiles.clear(); // Clear previous forced moves
 
       // Check and place forced moves
       checkForcedMoves();
 
-      // Get all new keys added during this turn (player + forced)
+      // Get all new keys added during this turn (for forced moves)
       const newKeys = Object.keys(board).filter((k) => !originalKeys.has(k));
+      
+      // Add all forced moves to the set (excluding the manually placed tile)
+      newKeys.forEach(k => {
+        if (k !== key) {
+          const [x, y] = k.split(',').map(Number);
+          forcedMoveTiles.add(k);
+        }
+      });
 
-      // Check adjacent empty spaces for overflow
       const hasInvalid = checkIllegalMoves(newKeys);
 
       if (hasInvalid) {
-        // Revert the board to the original state
         board = originalBoard;
+        lastPlayedTile = null;
+        forcedMoveTiles.clear();
       } else {
-        // Proceed with the move
         checkWinCondition();
         currentPlayer = currentPlayer === "white" ? "red" : "white";
-        if (aiEnabled && gameState === "game") setTimeout(aiMove, 500);  // Add game state check here
+        if (aiEnabled && gameState === "game") setTimeout(aiMove, 1000);
       }
     }
   }
@@ -337,6 +379,8 @@ function restartGame() {
   winningLineEdges = null;
   winningLineType = null;
   winningPlayer = null;
+  lastPlayedTile = null;
+  forcedMoveTiles.clear();
 }
 
 function checkWinCondition() {
@@ -512,8 +556,10 @@ function dfsCheckLine(
 }
 
 function drawLoop() {
+  
   if (loopPath.length > 1) {
-    stroke(255, 255, 0);
+    forcedMoveTiles.clear();
+    stroke(0, 255, 0);
     strokeWeight(2);
     noFill();
     beginShape();
@@ -530,8 +576,8 @@ function drawLoop() {
 
 function drawWinningLine() {
   if (!winningLineType || !winningLineEdges) return;
-
-  stroke(255, 255, 0);
+  forcedMoveTiles.clear();
+  stroke(0, 255, 0);
   strokeWeight(20);
   noFill();
 
@@ -823,96 +869,309 @@ function drawCurrentPlayer() {
 }
 
 function aiMove() {
-  let possibleMoves = [];
-  let emptySpaces = findEmptyAdjacentSpaces();
+    let emptySpaces = findEmptyAdjacentSpaces();
+    let bestMove = null;
 
-  for (let {x, y} of emptySpaces) {
-      for (let tileType of ['curve', 'cross']) {
-          let rotations = tileType === 'curve' ? [0, 90, 180, 270] : [0, 90];
-          for (let rotation of rotations) {
-              let tile = { side: tileType, rotation: rotation, color: 'red' };
-              
-              if (!isValidPlacement(x, y, tile)) continue;
+    // 1. First Priority: Check for immediate winning moves
+    bestMove = findWinningMove(emptySpaces);
+    if (bestMove) {
+        makeMove(bestMove);
+        return;
+    }
 
-              // Clone the current board and game state
-              let originalBoard = JSON.parse(JSON.stringify(board));
-              let originalGameState = gameState;
-              let originalWinningPlayer = winningPlayer;
-              let originalLoopPath = [...loopPath];
-              let originalWinningLine = [...winningLine];
-              let originalWinningLineEdges = winningLineEdges;
-              let originalWinningLineType = winningLineType;
+    // 2. Second Priority: Block opponent's immediate winning moves
+    bestMove = findBlockingMove(emptySpaces);
+    if (bestMove) {
+        makeMove(bestMove);
+        return;
+    }
 
-              // Simulate placing the tile
-              let key = `${x},${y}`;
-              board[key] = tile;
+    // 3. Third Priority: Block potential 4-arc loops
+    bestMove = findLoopBlockingMove();
+    if (bestMove) {
+        makeMove(bestMove);
+        return;
+    }
 
-              // Apply forced moves
-              checkForcedMoves();
+    // 4. Fourth Priority: Make a safe random move
+    bestMove = findSafeRandomMove(emptySpaces);
+    if (bestMove) {
+        makeMove(bestMove);
+    }
+}
 
-              // Check for overflow
-              let newKeys = Object.keys(board).filter(k => !(k in originalBoard));
-              let hasInvalid = checkIllegalMoves(newKeys);
+function findWinningMove(emptySpaces) {
+    for (let {x, y} of emptySpaces) {
+        for (let tileType of ['curve', 'cross']) {
+            let rotations = tileType === 'curve' ? [0, 90, 180, 270] : [0, 90];
+            for (let rotation of rotations) {
+                let tile = { side: tileType, rotation: rotation, color: 'red' };
+                if (!isValidPlacement(x, y, tile)) continue;
 
-              if (hasInvalid) {
-                  // Restore original state if invalid
-                  board = originalBoard;
-                  gameState = originalGameState;
-                  winningPlayer = originalWinningPlayer;
-                  loopPath = originalLoopPath;
-                  winningLine = originalWinningLine;
-                  winningLineEdges = originalWinningLineEdges;
-                  winningLineType = originalWinningLineType;
-                  continue;
-              }
+                // Simulate move
+                let originalBoard = JSON.parse(JSON.stringify(board));
+                let key = `${x},${y}`;
+                board[key] = tile;
+                checkForcedMoves();
+                checkWinCondition();
 
-              // Check for win condition
-              checkWinCondition();
-              let isWin = gameState === "gameOver" && (winningPlayer === 'Red Loop' || winningPlayer === 'Red Line');
+                let isWinning = gameState === "gameOver" && 
+                    (winningPlayer === 'Red Loop' || winningPlayer === 'Red Line');
 
-              // Restore original state
-              board = originalBoard;
-              gameState = originalGameState;
-              winningPlayer = originalWinningPlayer;
-              loopPath = originalLoopPath;
-              winningLine = originalWinningLine;
-              winningLineEdges = originalWinningLineEdges;
-              winningLineType = originalWinningLineType;
+                // Restore board state
+                board = originalBoard;
+                gameState = "game";
+                winningPlayer = null;
 
-              if (!hasInvalid) {
-                  possibleMoves.push({ x, y, tile, isWin });
-              }
-          }
-      }
-  }
+                if (isWinning) {
+                    return { x, y, tile };
+                }
+            }
+        }
+    }
+    return null;
+}
 
-  if (possibleMoves.length === 0) return;
+function findBlockingMove(emptySpaces) {
+    for (let {x, y} of emptySpaces) {
+        for (let tileType of ['curve', 'cross']) {
+            let rotations = tileType === 'curve' ? [0, 90, 180, 270] : [0, 90];
+            for (let rotation of rotations) {
+                let tile = { side: tileType, rotation: rotation, color: 'red' };
+                if (!isValidPlacement(x, y, tile)) continue;
 
-  // Prioritize winning moves
-  let winningMoves = possibleMoves.filter(m => m.isWin);
-  let move;
-  if (winningMoves.length > 0) {
-      move = winningMoves[Math.floor(Math.random() * winningMoves.length)];
-  } else {
-      move = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
-  }
+                // Simulate move
+                let originalBoard = JSON.parse(JSON.stringify(board));
+                let key = `${x},${y}`;
+                board[key] = tile;
+                checkForcedMoves();
 
-  // Apply the selected move
-  let key = `${move.x},${move.y}`;
-  board[key] = move.tile;
+                // Check if this prevents opponent's immediate win
+                let preventsWin = !canOpponentWinNextMove();
 
-  // Handle forced moves and check for overflow
-  let originalBoard = JSON.parse(JSON.stringify(board));
-  checkForcedMoves();
-  let newKeys = Object.keys(board).filter(k => !(k in originalBoard));
-  let hasInvalid = checkIllegalMoves(newKeys);
+                // Restore board state
+                board = originalBoard;
 
-  if (hasInvalid) {
-      board = originalBoard; // Revert if overflow occurs (unlikely)
-  } else {
-      checkWinCondition();
-      if (gameState !== "gameOver") {
-          currentPlayer = 'white';
-      }
-  }
+                if (preventsWin) {
+                    return { x, y, tile };
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function findLoopBlockingMove() {
+    // Find all white curves
+    let whiteCurves = Object.entries(board)
+        .filter(([_, tile]) => tile.side === 'curve' && tile.color === 'white')
+        .map(([key, tile]) => ({
+            key,
+            x: parseInt(key.split(',')[0]),
+            y: parseInt(key.split(',')[1]),
+            connections: getConnections(tile)
+        }));
+
+    // Check each pair of connected white curves
+    for (let i = 0; i < whiteCurves.length; i++) {
+        for (let j = i + 1; j < whiteCurves.length; j++) {
+            let curve1 = whiteCurves[i];
+            let curve2 = whiteCurves[j];
+
+            // Check if curves are connected
+            if (areConnected(curve1, curve2)) {
+                // Find potential completion points
+                let blockingPoints = findPotentialCompletionPoints(curve1, curve2);
+                
+                for (let point of blockingPoints) {
+                    let blockingTile = findBestBlockingTile(point.x, point.y);
+                    if (blockingTile) {
+                        return { x: point.x, y: point.y, tile: blockingTile };
+                    }
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function findSafeRandomMove(emptySpaces) {
+    let safeMoves = [];
+    for (let {x, y} of emptySpaces) {
+        for (let tileType of ['curve', 'cross']) {
+            let rotations = tileType === 'curve' ? [0, 90, 180, 270] : [0, 90];
+            for (let rotation of rotations) {
+                let tile = { side: tileType, rotation: rotation, color: 'red' };
+                if (!isValidPlacement(x, y, tile)) continue;
+
+                // Check if move is safe
+                let originalBoard = JSON.parse(JSON.stringify(board));
+                let key = `${x},${y}`;
+                board[key] = tile;
+                checkForcedMoves();
+                checkWinCondition();
+
+                let isSafe = gameState !== "gameOver" || 
+                    !(winningPlayer === 'White Loop' || winningPlayer === 'White Line');
+
+                board = originalBoard;
+                gameState = "game";
+                winningPlayer = null;
+
+                if (isSafe) {
+                    safeMoves.push({ x, y, tile });
+                }
+            }
+        }
+    }
+
+    return safeMoves.length > 0 ? 
+        safeMoves[Math.floor(Math.random() * safeMoves.length)] : null;
+}
+
+function areConnected(curve1, curve2) {
+    let dx = curve2.x - curve1.x;
+    let dy = curve2.y - curve1.y;
+    let dir = getDirection(dx, dy);
+    let oppDir = oppositeDirection(dir);
+    
+    return curve1.connections[dir] === 'white' && 
+           curve2.connections[oppDir] === 'white';
+}
+
+function findPotentialCompletionPoints(curve1, curve2) {
+    let points = [];
+    let freeEnds1 = getFreeEnds(curve1);
+    let freeEnds2 = getFreeEnds(curve2);
+
+    for (let end1 of freeEnds1) {
+        for (let end2 of freeEnds2) {
+            // Check diagonal points that could complete the loop
+            let potentialPoints = [
+                { x: end1.x, y: end2.y },
+                { x: end2.x, y: end1.y }
+            ];
+
+            for (let point of potentialPoints) {
+                let key = `${point.x},${point.y}`;
+                if (!board[key]) {
+                    points.push(point);
+                }
+            }
+        }
+    }
+
+    return points;
+}
+
+function getFreeEnds(curve) {
+    let ends = [];
+    for (let [dir, color] of Object.entries(curve.connections)) {
+        if (color === 'white') {
+            let [dx, dy] = directionToOffset(dir);
+            let x = curve.x + dx;
+            let y = curve.y + dy;
+            let key = `${x},${y}`;
+            if (!board[key]) {
+                ends.push({ x, y });
+            }
+        }
+    }
+    return ends;
+}
+
+function findBestBlockingTile(x, y) {
+    // Try curves first, as they're generally more versatile
+    for (let rotation of [0, 90, 180, 270]) {
+        let tile = { side: 'curve', rotation, color: 'red' };
+        if (isValidPlacement(x, y, tile)) {
+            return tile;
+        }
+    }
+    
+    // Fall back to crosses if curves don't work
+    for (let rotation of [0, 90]) {
+        let tile = { side: 'cross', rotation, color: 'red' };
+        if (isValidPlacement(x, y, tile)) {
+            return tile;
+        }
+    }
+    
+    return null;
+}
+
+function directionToOffset(dir) {
+    const offsets = {
+        'top': [0, -1],
+        'right': [1, 0],
+        'bottom': [0, 1],
+        'left': [-1, 0]
+    };
+    return offsets[dir];
+}
+
+function makeMove(move) {
+    let key = `${move.x},${move.y}`;
+    const originalKeys = new Set(Object.keys(board));
+    
+    board[key] = move.tile;
+    lastPlayedTile = { x: move.x, y: move.y };
+    forcedMoveTiles.clear(); // Clear previous forced moves
+    
+    checkForcedMoves();
+    
+    // Identify forced moves
+    const newKeys = Object.keys(board).filter((k) => !originalKeys.has(k));
+    newKeys.forEach(k => {
+        if (k !== key) {
+            const [x, y] = k.split(',').map(Number);
+            forcedMoveTiles.add(k);
+        }
+    });
+    
+    checkWinCondition();
+    if (gameState !== "gameOver") currentPlayer = 'white';
+}
+
+function canOpponentWinNextMove() {
+    let originalBoard = JSON.parse(JSON.stringify(board));
+    let originalGameState = gameState;
+    let originalPlayer = currentPlayer;
+    
+    currentPlayer = 'white';
+    let emptySpaces = findEmptyAdjacentSpaces();
+    
+    for (let {x, y} of emptySpaces) {
+        for (let tileType of ['curve', 'cross']) {
+            let rotations = tileType === 'curve' ? [0, 90, 180, 270] : [0, 90];
+            for (let rotation of rotations) {
+                let tile = { side: tileType, rotation, color: 'white' };
+                if (!isValidPlacement(x, y, tile)) continue;
+
+                let key = `${x},${y}`;
+                board[key] = tile;
+                checkForcedMoves();
+                checkWinCondition();
+
+                if (gameState === "gameOver" && 
+                    (winningPlayer === 'White Loop' || winningPlayer === 'White Line')) {
+                    
+                    // Restore original state
+                    board = originalBoard;
+                    gameState = originalGameState;
+                    currentPlayer = originalPlayer;
+                    return true;
+                }
+
+                board = JSON.parse(JSON.stringify(originalBoard));
+                gameState = originalGameState;
+            }
+        }
+    }
+    
+    // Restore original state
+    board = originalBoard;
+    gameState = originalGameState;
+    currentPlayer = originalPlayer;
+    return false;
 }
