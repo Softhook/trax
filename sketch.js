@@ -51,6 +51,7 @@ function drawGameOverScreen() {
 }
 
 function drawIntroScreen() {
+  noStroke();
   fill(0);
   textSize(32);
   text("TRAX", width / 2, height / 3);
