@@ -168,81 +168,33 @@ class Game {
         }
     }
 
-checkWinCondition() {
-    if (Object.keys(this.board.tiles).length === 0) {
-        return; // Board is empty, no win conditions possible
-    }
-
-    this.loopPath = [];
-    this.winningLine = [];
-
-    // Check for both loop and line wins for both players
-    const whiteLoop = this.checkForLoopWin("white"); // Check for white loop
-    const redLoop = this.checkForLoopWin("red");   // Check for red loop
-    const whiteLine = this.checkLineWin("white");
-    const redLine = this.checkLineWin("red");
-
-    // Prioritize current player's win if multiple conditions are met
-    if (this.currentPlayer === "white") {
-        if (whiteLoop) {
-            this.winningPlayer = "White Loop";
-            this.gameState = "gameOver";
-            return;
-        }
-        if (whiteLine) {
-            this.winningPlayer = "White Line";
-            this.gameState = "gameOver";
-            return;
-        }
-    } else { // Current player is red
-        if (redLoop) {
-            this.winningPlayer = "Red Loop";
-            this.gameState = "gameOver";
-            return;
-        }
-        if (redLine) {
-            this.winningPlayer = "Red Line";
-            this.gameState = "gameOver";
-            return;
-        }
-    }
-
-   //If current player did not win, check if the other player won
-    if (this.currentPlayer === "red") {
-        if (whiteLoop) {
-            this.winningPlayer = "White Loop";
-            this.gameState = "gameOver";
-            return;
-        }
-        if (whiteLine) {
-            this.winningPlayer = "White Line";
-            this.gameState = "gameOver";
-            return;
-        }
-    } else { // Current player is white
-        if (redLoop) {
-            this.winningPlayer = "Red Loop";
-            this.gameState = "gameOver";
-            return;
-        }
-        if (redLine) {
-            this.winningPlayer = "Red Line";
-            this.gameState = "gameOver";
-            return;
-        }
-    }
-}
-
-checkForLoopWin(color) {
-    for (const key in this.board.tiles) {
-        if (this.board.tiles[key].color === color) { // Check only tiles of the current color
-            if (this.checkForLoop(key, color)) {
-                return true;
+    checkWinCondition() {
+        this.loopPath = [];
+        this.winningLine = [];
+        for (let key in this.board.tiles) {
+            if (this.checkForLoop(key, "white")) {
+                this.winningPlayer = "White Loop";
+                this.gameState = "gameOver";
+                return;
+            }
+            if (this.checkForLoop(key, "red")) {
+                this.winningPlayer = "Red Loop";
+                this.gameState = "gameOver";
+                return;
             }
         }
+
+        if (this.checkLineWin("white")) {
+            this.winningPlayer = "White Line";
+            this.gameState = "gameOver";
+            return;
+        }
+        if (this.checkLineWin("red")) {
+            this.winningPlayer = "Red Line";
+            this.gameState = "gameOver";
+            return;
+        }
     }
-    return false;
-}
 
     checkLineWin(color) {
         let startTiles = Object.keys(this.board.tiles).filter(
@@ -385,9 +337,6 @@ checkForLoopWin(color) {
 
 
     checkForLoop(startKey, color) {
-            if (!startKey) {
-        return false;
-    }
         let visited = new Set();
         let stack = [{ key: startKey, from: null, path: [] }];
 
@@ -880,37 +829,38 @@ class AIPlayer {
         return null;
     }
 
-canOpponentWinNextMove() {
-    const opponentColor = this.playerColor;
-    let emptySpaces = this.game.findEmptyAdjacentSpaces();
+    canOpponentWinNextMove() {
+        const opponentColor = this.playerColor;
+        let emptySpaces = this.game.findEmptyAdjacentSpaces();
 
-    for (let { x, y } of emptySpaces) {
-        for (let tileType of ['curve', 'cross']) {
-            let rotations = tileType === 'curve' ? [0, 90, 180, 270] : [0, 90];
-            for (let rotation of rotations) {
-                let tile = new Tile(tileType, rotation, opponentColor);
-                if (!this.game.isValidPlacement(x, y, tile)) continue;
+        for (let { x, y } of emptySpaces) {
+            for (let tileType of ['curve', 'cross']) {
+                let rotations = tileType === 'curve' ? [0, 90, 180, 270] : [0, 90];
+                for (let rotation of rotations) {
+                    let tile = new Tile(tileType, rotation, opponentColor);
+                    if (!this.game.isValidPlacement(x, y, tile)) continue;
 
-                let originalBoard = this.board.cloneBoard();
-                this.board.placeTile(x, y, tile);
-                this.game.checkForcedMoves();
-                this.game.checkWinCondition();
+                    let originalBoard = this.board.cloneBoard();
+                    let key = `${x},${y}`;
+                    this.board.placeTile(x, y, tile);
+                    this.game.checkForcedMoves();
+                    this.game.checkWinCondition();
 
-                let canWin = this.game.gameState === "gameOver" &&
-                    (this.game.winningPlayer === `${opponentColor.charAt(0).toUpperCase() + opponentColor.slice(1)} Loop` || this.game.winningPlayer === `${opponentColor.charAt(0).toUpperCase() + opponentColor.slice(1)} Line`);
+                    let canWin = this.game.gameState === "gameOver" &&
+                        (this.game.winningPlayer === `${opponentColor.charAt(0).toUpperCase() + opponentColor.slice(1)} Loop` || this.game.winningPlayer === `${opponentColor.charAt(0).toUpperCase() + opponentColor.slice(1)} Line`);
 
-                this.board.tiles = originalBoard.tiles;
-                this.game.gameState = "game";
-                this.game.winningPlayer = null;
+                    this.board.tiles = originalBoard.tiles;
+                    this.game.gameState = "game";
+                    this.game.winningPlayer = null;
 
-                if (canWin) {
-                    return true;
+                    if (canWin) {
+                        return true;
+                    }
                 }
             }
         }
+        return false;
     }
-    return false;
-}
 
 
     findBlockingMove(emptySpaces) {
@@ -965,7 +915,7 @@ canOpponentWinNextMove() {
                     let blockingPoints = this.findPotentialCompletionPoints(curve1, curve2, opponentColor);
 
                     for (let point of blockingPoints) {
-                        let blockingTile = this.findBestBlockingTile(point.x, point.y, opponentColor);
+                        let blockingTile = this.findBestBlockingTile(point.x, point.y);
                         if (blockingTile) {
                             return { x: point.x, y: point.y, tile: blockingTile };
                         }
@@ -976,53 +926,38 @@ canOpponentWinNextMove() {
         return null;
     }
 
-    areConnected(curve1, curve2, color) {
-        const directions = [
-            { dx: 0, dy: -1, dir: "top", oppDir: "bottom" },
-            { dx: 1, dy: 0, dir: "right", oppDir: "left" },
-            { dx: 0, dy: 1, dir: "bottom", oppDir: "top" },
-            { dx: -1, dy: 0, dir: "left", oppDir: "right" }
-        ];
+    findSafeRandomMove(emptySpaces) {
+        let safeMoves = [];
+        for (let { x, y } of emptySpaces) {
+            for (let tileType of ['curve', 'cross']) {
+                let rotations = tileType === 'curve' ? [0, 90, 180, 270] : [0, 90];
+                for (let rotation of rotations) {
+                    let tile = new Tile(tileType, rotation, this.aiColor);
+                    if (!this.game.isValidPlacement(x, y, tile)) continue;
 
-        for (const dir1 of directions) {
-            for (const dir2 of directions) {
-                if (curve1.connections[dir1.dir] === color && curve2.connections[dir2.dir] === color) {
-                    const neighbor1Key = `<span class="math-inline">\{curve1\.x \+ dir1\.dx\},</span>{curve1.y + dir1.dy}`;
-                    const neighbor2Key = `<span class="math-inline">\{curve2\.x \+ dir2\.dx\},</span>{curve2.y + dir2.dy}`;
+                    let originalBoard = this.board.cloneBoard();
+                    let key = `${x},${y}`;
+                    this.board.placeTile(x, y, tile);
+                    this.game.checkForcedMoves();
+                    this.game.checkWinCondition();
 
-                    if (neighbor1Key === neighbor2Key && !this.board.tiles[neighbor1Key]) {
-                        return true;
+                    let isSafe = this.game.gameState !== "gameOver" ||
+                        !(this.game.winningPlayer === `${this.playerColor.charAt(0).toUpperCase() + this.playerColor.slice(1)} Loop` || this.game.winningPlayer === `${this.playerColor.charAt(0).toUpperCase() + this.playerColor.slice(1)} Line`);
+
+                    this.board.tiles = originalBoard.tiles;
+                    this.game.gameState = "game";
+                    this.game.winningPlayer = null;
+
+                    if (isSafe) {
+                        safeMoves.push({ x, y, tile });
                     }
                 }
             }
         }
-        return false;
+
+        return safeMoves.length > 0 ?
+            safeMoves[Math.floor(Math.random() * safeMoves.length)] : null;
     }
-
-findSafeRandomMove(emptySpaces) {
-    for (let { x, y } of emptySpaces) {
-        for (let tileType of ['curve', 'cross']) {
-            let rotations = tileType === 'curve' ? [0, 90, 180, 270] : [0, 90];
-            for (let rotation of rotations) {
-                let tile = new Tile(tileType, rotation, this.aiColor);
-                if (!this.game.isValidPlacement(x, y, tile)) continue;
-
-                let originalBoard = this.board.cloneBoard();
-                this.board.placeTile(x, y, tile);
-                this.game.checkForcedMoves();
-
-                const isSafe = !this.canOpponentWinNextMove();
-
-                this.board.tiles = originalBoard.tiles;
-
-                if (isSafe) {
-                    return { x, y, tile };
-                }
-            }
-        }
-    }
-    return null;
-}
 
     areConnected(curve1, curve2, color) {
         let dx = curve2.x - curve1.x;
@@ -1074,61 +1009,23 @@ findSafeRandomMove(emptySpaces) {
         return ends;
     }
 
-findBestBlockingTile(x, y, opponentColor) {
-    let possibleTiles = [
-        { side: "curve", rotation: 0 },
-        { side: "curve", rotation: 90 },
-        { side: "curve", rotation: 180 },
-        { side: "curve", rotation: 270 },
-        { side: "cross", rotation: 0 },
-        { side: "cross", rotation: 90 },
-    ];
-
-    for (let tileConfig of possibleTiles) {
-        let tile = new Tile(tileConfig.side, tileConfig.rotation, this.aiColor);  // AI's tile
-        if (!this.game.isValidPlacement(x, y, tile)) continue;
-
-        let originalBoard = this.board.cloneBoard(); // Store original board
-        this.board.placeTile(x, y, tile); // Place the AI's tile
-        this.game.checkForcedMoves();
-
-        // Simulate opponent's move:
-        let opponentWins = false;
-        for (let opponentTileType of ['curve', 'cross']) {
-            let opponentRotations = opponentTileType === 'curve' ? [0, 90, 180, 270] : [0, 90];
-            let opponentEmptySpaces = this.game.findEmptyAdjacentSpaces(); // Get empty spaces after AI move
-
-            for (let oppX of opponentEmptySpaces.map(space => space.x)) {
-                for (let oppY of opponentEmptySpaces.map(space => space.y)) {
-                    for (let opponentRotation of opponentRotations) {
-                        let opponentTile = new Tile(opponentTileType, opponentRotation, opponentColor);
-                        if (!this.game.isValidPlacement(oppX, oppY, opponentTile)) continue;
-
-                        let oppOriginalBoard = this.board.cloneBoard(); // Clone again for opponent move sim
-                        this.board.placeTile(oppX, oppY, opponentTile);
-                        this.game.checkForcedMoves();
-                        this.game.checkWinCondition();
-                        opponentWins = this.game.gameState === "gameOver" && (this.game.winningPlayer === `${opponentColor.charAt(0).toUpperCase() + opponentColor.slice(1)} Loop` || this.game.winningPlayer === `${opponentColor.charAt(0).toUpperCase() + opponentColor.slice(1)} Line`);
-                        this.board.tiles = oppOriginalBoard.tiles; // Revert Opponent move
-                        this.game.gameState = "game";
-                        this.game.winningPlayer = null;
-
-                        if (opponentWins) break; // Opponent can win, tile is bad.
-                    }
-                    if (opponentWins) break;
-                }
-                if (opponentWins) break;
+    findBestBlockingTile(x, y) {
+        for (let rotation of [0, 90, 180, 270]) {
+            let tile = new Tile('curve', rotation, this.aiColor);
+            if (this.game.isValidPlacement(x, y, tile)) {
+                return tile;
             }
-            if (opponentWins) break;
         }
 
-        this.board.tiles = originalBoard.tiles; // Revert AI move
-        if (!opponentWins) { // If opponent cannot win after AI move, this tile is good.
-            return tile;
+        for (let rotation of [0, 90]) {
+            let tile = new Tile('cross', rotation, this.aiColor);
+            if (this.game.isValidPlacement(x, y, tile)) {
+                return tile;
+            }
         }
+
+        return null;
     }
-    return null;
-}
 }
 
 
@@ -1185,6 +1082,8 @@ class GameRenderer {
         text("Choose your color:", width / 2, height / 2 - 50);
 
         // Red color button
+        fill(0);
+        text("Red", width / 2 - 50, height / 2 - 70);
         fill(255, 0, 0);
         rect(width / 2 - 75, height / 2 - 25, 50, 50);
         if (this.game.playerColor === "red") { // Highlight for Red selection
@@ -1196,6 +1095,8 @@ class GameRenderer {
         }
 
         // White color button
+        fill(0);
+        text("White", width / 2 + 50, height / 2 - 70);
         fill(255);
         rect(width / 2 + 25, height / 2 - 25, 50, 50);
         if (this.game.playerColor === "white") { // Highlight for White selection
