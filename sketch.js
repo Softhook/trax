@@ -1307,11 +1307,17 @@ class GameRenderer {
     drawIntroScreen() {
         noStroke();
         fill(0);
-        textSize(32);
+        textSize(40);
         text("TRAX", width / 2, height / 4);
 
+        textSize(20);
+        text("Two ways to win:", width / 2, height / 4+50);
+        text("1 Make a loop of your colour", width / 2, height / 4+80);
+        text("2 Connect opposite and outermost edges across 8+ rows/columns.", width / 2, height / 4+110);
+ 
+
         textSize(24);
-        text("Choose your color:", width / 2, height / 2 - 50);
+        text("Choose your colour:", width / 2, height / 2 - 50);
 
         // Red color button
         fill(255, 0, 0);
@@ -1343,6 +1349,13 @@ class GameRenderer {
         textSize(24);
         text("2 Player", width / 2, height / 2 + 75);
         text("vs AI", width / 2, height / 2 + 150);
+
+        
+        textSize(15);
+        text("http://www.traxgame.com/about_rules.php", width / 2, height / 2+220);
+        text("Boardgame David Smith, 1980", width / 2, height / 2+250);
+        text("Javascript Christian Nold, 2025", width / 2, height / 2+280);
+
     }
 
     windowResized() {
