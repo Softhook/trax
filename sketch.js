@@ -1,3 +1,9 @@
+let font;
+
+function preload() {
+  font = loadFont('neotrax-regular.ttf');
+}
+
 class Game {
     constructor() {
         this.gameState = "intro";
@@ -1307,12 +1313,13 @@ class GameRenderer {
     drawIntroScreen() {
         noStroke();
         fill(0);
-        textSize(40);
+        textFont(font);
+        textSize(50);
         text("TRAX", width / 2, height / 4);
 
         textSize(20);
         text("Two ways to win:", width / 2, height / 4+50);
-        text("1 Make a loop of your colour", width / 2, height / 4+80);
+        text("1 Make a loop of your colour.", width / 2, height / 4+80);
         text("2 Connect opposite and outermost edges across 8+ rows/columns.", width / 2, height / 4+110);
  
 
@@ -1348,7 +1355,7 @@ class GameRenderer {
         fill(0);
         textSize(24);
         text("2 Player", width / 2, height / 2 + 75);
-        text("vs AI", width / 2, height / 2 + 150);
+        text("vs. AI", width / 2, height / 2 + 150);
 
         
         textSize(15);
@@ -1433,7 +1440,7 @@ class GameRenderer {
         if (this.game.aiEnabled) {
             displayColor = this.game.playerColor === "white" ? (this.game.currentPlayer === "white" ? "You (White)" : "AI (Red)") : (this.game.currentPlayer === "red" ? "You (Red)" : "AI (White)");
         } else {
-            displayColor = `Player ${this.game.currentPlayer.charAt(0).toUpperCase() + this.game.currentPlayer.slice(1)}`;
+            displayColor = `${this.game.currentPlayer.charAt(0).toUpperCase() + this.game.currentPlayer.slice(1)}`;
         }
         text(`Current Player: ${displayColor}`, width / 2, 50);
     }
