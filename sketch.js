@@ -14,6 +14,7 @@ let lastPlayedTile = null;
 let forcedMoveTiles = new Set();
 let playerColor = null;
 let aiColor = null;
+let winType = "";
 let font;
 
 function preload() {
@@ -40,8 +41,12 @@ function draw() {
     } else if (gameState === "gameOver") {
         drawGameOverScreen();
         drawBoard();
-        drawLoop();
+        if (winType === "loop") { 
+            drawLoop();
+        }
+        if (winType === "line") { 
         drawWinningLine();
+        }
     }
 }
 
@@ -417,6 +422,7 @@ function restartGame() {
     winningPlayer = null;
     lastPlayedTile = null;
     forcedMoveTiles.clear();
+    winType = "";
 }
 
 function checkWinCondition() {
@@ -426,11 +432,13 @@ function checkWinCondition() {
         if (checkForLoop(key, "white")) {
             winningPlayer = "White Loop";
             gameState = "gameOver";
+            winType = "loop";
             return;
         }
         if (checkForLoop(key, "red")) {
             winningPlayer = "Red Loop";
             gameState = "gameOver";
+            winType = "loop";
             return;
         }
     }
@@ -438,11 +446,13 @@ function checkWinCondition() {
     if (checkLineWin("white")) {
         winningPlayer = "White Line";
         gameState = "gameOver";
+        winType = "line";
         return;
     }
     if (checkLineWin("red")) {
         winningPlayer = "Red Line";
         gameState = "gameOver";
+        winType = "line";
         return;
     }
 }
