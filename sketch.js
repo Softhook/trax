@@ -793,27 +793,6 @@ function oppositeDirection(dir) {
     return { top: "bottom", right: "left", bottom: "top", left: "right" }[dir];
 }
 
-function drawConnectionDots(tile) {
-    let connections = getConnections(tile);
-    strokeWeight(8);
-
-    if (connections.top)
-        stroke(connections.top === "white" ? 255 : color(200, 0, 0));
-    point(0, -tileSize / 2);
-
-    if (connections.right)
-        stroke(connections.right === "white" ? 255 : color(200, 0, 0));
-    point(tileSize / 2, 0);
-
-    if (connections.bottom)
-        stroke(connections.bottom === "white" ? 255 : color(200, 0, 0));
-    point(0, tileSize / 2);
-
-    if (connections.left)
-        stroke(connections.left === "white" ? 255 : color(200, 0, 0));
-    point(-tileSize / 2, 0);
-}
-
 function getConnections(tile) {
     const connections = { top: null, right: null, bottom: null, left: null };
 
